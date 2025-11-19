@@ -3,8 +3,8 @@
 ## Setup
 1. Create a python environment using `python -m venv env`.
 2. Start the environment.
-    On Windows `source env/Scripts/activate`
-    On Linux `source env/bin/activate`
+    1. On Windows `source env/Scripts/activate`
+    2. On Linux `source env/bin/activate`
 3. Install the dependencies with `pip install -r requirements.txt`
 
 ## Usage
@@ -21,5 +21,5 @@ We will also investigate the Drone Swarm Search environment.
 Link: https://github.com/pfeinsper/drone-swarm-search
 
 ## Misc
-Make sure to use the PettingZoo version of MPE and not the MPE2 package. MPE2 does not work, it's got some kind of file mismatch with PettingZoo's AgentSelector(or more subtle issue) and does not work.
+Make sure to use the PettingZoo version of MPE and not the MPE2 package. MPE2 does not work, it's got some kind of file mismatch with PettingZoo's AgentSelector(or more subtle issue).
 
