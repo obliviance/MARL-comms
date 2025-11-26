@@ -12,7 +12,7 @@ for agent in env.agent_iter():
     if termination or truncation:
         action = None
     else:
-        action = random_policy(observation, reward, env.action_space(agent))
+        action = random_policy(observation, env.action_space(agent), reward)
         #action = env.action_space(agent).sample() # this is where you would insert your policy
 
     env.step(action)
