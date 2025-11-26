@@ -1,4 +1,6 @@
 import random
+import numpy as np
+from pettingzoo.mpe import simple_speaker_listener_v4
 
 def random_policy(observation, action_space, reward):
     return random.choice(range(action_space.n))
