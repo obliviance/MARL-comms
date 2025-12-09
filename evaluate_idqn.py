@@ -2,15 +2,17 @@ import numpy as np
 import torch
 from pettingzoo.mpe import simple_speaker_listener_v4
 from idqn_model import DQN
-from train_idqn import apply_comm_dropout, COMM_DIM
+from train_idqn import apply_comm_dropout, COMM_DIM, speaker_policy
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+# load trained dqn for the listener and evaluate it in the simple speaker listener env at a given noise level 
 def evaluate_model(
     model_path: str,
     noise_prob: float,
     num_episodes: int = 50,
-    max_cycles: int = 25
+    max_cycles: int = 25,
+    success_threshold: float = -12.0
 ):
     env = simple_speaker_listener_v4.parallel_env(max_cycles=max_cycles, continuous_actions=False)
     
@@ -28,6 +30,7 @@ def evaluate_model(
     q_net.eval()
     
     episode_rewards = []
+    successes = 0
     
     for ep in range(num_episodes):
         obs, infos = env.reset()
@@ -39,8 +42,10 @@ def evaluate_model(
         while not all(done.values()):
             actions = {}
             
-            # speaker simple random action
-            actions[speaker_id] = env.action_space(speaker_id).sample()
+            # # speaker simple random action
+            # actions[speaker_id] = env.action_space(speaker_id).sample()
+            sp_obs = obs[speaker_id]
+            actions[speaker_id] = speaker_policy(sp_obs, env.action_space(speaker_id))
             
             # listener greedy action from trained Q-network
             if done[listener_id]:
@@ -63,21 +68,42 @@ def evaluate_model(
             obs = next_obs
             
         episode_rewards.append(ep_reward)
+        if ep_reward > success_threshold:
+            successes += 1
         
     env.close()
     avg_reward = float(np.mean(episode_rewards))
-    return avg_reward
+    success_rate = successes/num_episodes
+    reward_stability = float(np.std(episode_rewards))
+    return avg_reward, success_rate, reward_stability
 
 if __name__ == "__main__":
     model_path = "idqn_listener_clean.pth"  # from train_idqn.py
-    noise_levels = [0.0, 0.1, 0.3, 0.5]
+    noise_levels = [0.0, 0.1, 0.3, 0.5, 1.0]
 
     print("Evaluating trained IDQN at different noise levels:")
     results = []
     for p in noise_levels:
-        avg_r = evaluate_model(model_path, noise_prob=p, num_episodes=50)
-        results.append((p, avg_r))
-        print(f"Noise = {p:.1f}, average episode reward = {avg_r:.3f}")
+        avg_r, succ, std = evaluate_model(model_path, noise_prob=p, num_episodes=250, max_cycles=50, success_threshold=-12.0)
+        results.append((p, avg_r, succ, std))
+        print(f"Noise = {p:.1f}, average episode reward = {avg_r:.3f}, success rate = {succ*100:.1f}%, reward std = {std:.2f}")
 
-    # Save results to a .npy or .txt for plotting later if you like
+    # success retention
+    results_arr = np.array(results, dtype=float)
+    base_success = results_arr[0,2]
+    
+    print("\nSuccess retention relative to 0.0 noise:")
+    for noise, avg_r, succ, std in results_arr:
+        if base_success > 0:
+            retention = succ / base_success
+            print(
+                f"Noise = {noise:.1f}, success = {succ*100:.1f}%, "
+                f"success retention = {retention*100:.1f}%"
+            )
+        else:
+            print(
+                f"Noise = {noise:.1f}, success = {succ*100:.1f}%, "
+                "success retention = N/A (baseline success is 0)"
+            )
+
     np.save("idqn_eval_results.npy", np.array(results, dtype=float))
