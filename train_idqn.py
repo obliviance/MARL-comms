@@ -18,8 +18,12 @@ NOISE_PROB = 0.0    # default training without noise; test with differetn values
 # argmax if obs looks like one hot goal od and marches action space size
 def speaker_policy(obs: np.ndarray, action_space):
     try:
-        if hasattr(action_space, "n") and action_space.n == obs.shape[0]:
-            return int(np.argmax(obs))
+        # if hasattr(action_space, "n") and action_space.n == obs.shape[0]:
+        #     return int(np.argmax(obs))
+        n = action_space.n
+        goal_idx = int(np.argmax(obs[:n]))
+        if 0 <= goal_idx < n:
+            return goal_idx
     except Exception:
         pass
     return action_space.sample()
@@ -33,7 +37,7 @@ def train_idqn(
     batch_size: int = 64,
     eps_start: float = 1.0,
     eps_end: float = 0.05,
-    eps_decay: float = 0.995,
+    eps_decay: float = 0.999,
     noise_prob: float = NOISE_PROB,
     target_update_freq: int = 1000
 ):
@@ -41,7 +45,7 @@ def train_idqn(
     # uses message drop noise on the listener's obeservation
     
     env = simple_speaker_listener_v4.parallel_env(
-        max_cycles = 25, continuous_actions = False
+        max_cycles = 50, continuous_actions = False
     )
     
     listener_id = next(a for a in env.possible_agents if "listener" in a)
@@ -154,7 +158,7 @@ def train_idqn(
                 target_net.load_state_dict(q_net.state_dict())
             
         ep_rewards.append(ep_reward)
-        print(f"episodes {ep+1}/{num_ep}, reward={ep_reward:.2f}, epsilon={eps:.3f}")
+        # print(f"episodes {ep+1}/{num_ep}, reward={ep_reward:.2f}, epsilon={eps:.3f}")
     
     env.close()
     return q_net, ep_rewards
@@ -162,9 +166,9 @@ def train_idqn(
 # Main
 if __name__ == "__main__":
     # train without noise for baseline
-    trained_q, rewards = train_idqn(num_ep=300, noise_prob=0.0)
+    trained_q, rewards = train_idqn(num_ep=3000, noise_prob=0.0)
     
     # save model weights for later eval
     torch.save(trained_q.state_dict(), "idqn_listener_clean.pth")
     np.save("idqn_rewards_clean.npy", np.array(rewards))
-    print("training complete. model saved to idqn_listener_clean.pth")
+    print("Training complete. model saved to idqn_listener_clean.pth")
