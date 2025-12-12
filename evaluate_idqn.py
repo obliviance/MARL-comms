@@ -2,7 +2,8 @@ import numpy as np
 import torch
 from pettingzoo.mpe import simple_speaker_listener_v4
 from idqn_model import DQN
-from train_idqn import apply_comm_dropout, COMM_DIM, speaker_policy
+from train_idqn import COMM_DIM, speaker_policy
+from mpe_env import mask_landmarks, apply_comm_noise
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -12,7 +13,8 @@ def evaluate_model(
     noise_prob: float,
     num_episodes: int = 50,
     max_cycles: int = 25,
-    success_threshold: float = -12.0
+    success_threshold: float = -12.0,
+    noise_mode: str = "dropout",
 ):
     env = simple_speaker_listener_v4.parallel_env(max_cycles=max_cycles, continuous_actions=False)
     
@@ -36,7 +38,8 @@ def evaluate_model(
         obs, infos = env.reset()
         done = {agent: False for agent in env.possible_agents}
         
-        s_l = apply_comm_dropout(listener_id, obs[listener_id], drop_prob=noise_prob)
+        s_raw = apply_comm_noise(listener_id, obs[listener_id], mode=noise_mode, noise_prob=noise_prob)
+        s_l = mask_landmarks(s_raw)
         ep_reward = 0.0
         
         while not all(done.values()):
@@ -64,7 +67,7 @@ def evaluate_model(
             ep_reward += r_l
             
             # next noisy observation for listener
-            s_l = apply_comm_dropout(listener_id, next_obs[listener_id], drop_prob=noise_prob)
+            s_l = apply_comm_noise(listener_id, obs[listener_id], mode=noise_mode, noise_prob=noise_prob)
             obs = next_obs
             
         episode_rewards.append(ep_reward)
@@ -80,11 +83,12 @@ def evaluate_model(
 if __name__ == "__main__":
     model_path = "idqn_listener_clean.pth"  # from train_idqn.py
     noise_levels = [0.0, 0.1, 0.3, 0.5, 1.0]
-
-    print("Evaluating trained IDQN at different noise levels:")
+    NOISE_MODE = "gaussian" # none, dropout, gaussian, flip
+    
+    print(f"Evaluating trained IDQN with noise mode: {NOISE_MODE}:")
     results = []
     for p in noise_levels:
-        avg_r, succ, std = evaluate_model(model_path, noise_prob=p, num_episodes=250, max_cycles=50, success_threshold=-12.0)
+        avg_r, succ, std = evaluate_model(model_path, noise_prob=p, noise_mode=NOISE_MODE)
         results.append((p, avg_r, succ, std))
         print(f"Noise = {p:.1f}, average episode reward = {avg_r:.3f}, success rate = {succ*100:.1f}%, reward std = {std:.2f}")
 
