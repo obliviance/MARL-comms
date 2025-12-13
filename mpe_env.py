@@ -72,7 +72,7 @@ def apply_comm_noise(
 def mask_landmarks(obs: np.ndarray):
     # obs = [velocity_x, velocity_y, 6 landmark dims, 3 comm dims]
     masked = obs.copy()
-    masked[2:2+6] = 0.0
+    masked[2:8] = 0.0
     return masked
 
 def run_episode():

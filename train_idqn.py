@@ -115,7 +115,7 @@ def train_idqn(
             ep_reward += r_l
             
             # next noisy obs for listener
-            s_l_next = apply_comm_noise(listener_id, obs[listener_id], mode=NOISE_MODE, noise_prob=noise_prob)
+            s_l_next = apply_comm_noise(listener_id, next_obs[listener_id], mode=NOISE_MODE, noise_prob=noise_prob)
             done_l = done[listener_id]
             
             # store transition
