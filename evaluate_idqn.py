@@ -67,7 +67,7 @@ def evaluate_model(
             ep_reward += r_l
             
             # next noisy observation for listener
-            s_l = apply_comm_noise(listener_id, obs[listener_id], mode=noise_mode, noise_prob=noise_prob)
+            s_l = apply_comm_noise(listener_id, next_obs[listener_id], mode=noise_mode, noise_prob=noise_prob)
             obs = next_obs
             
         episode_rewards.append(ep_reward)
@@ -83,7 +83,7 @@ def evaluate_model(
 if __name__ == "__main__":
     model_path = "idqn_listener_clean.pth"  # from train_idqn.py
     noise_levels = [0.0, 0.1, 0.3, 0.5, 1.0]
-    NOISE_MODE = "gaussian" # none, dropout, gaussian, flip
+    NOISE_MODE = "flip" # none, dropout, gaussian, flip
     
     print(f"Evaluating trained IDQN with noise mode: {NOISE_MODE}:")
     results = []
