@@ -1,7 +1,8 @@
 from pettingzoo.mpe import simple_speaker_listener_v4
 import random
 import numpy as np
-from mpe_model import random_policy
+
+import mpe_policies as policies
 
 # noise config
 NOISE_PROB = 0.3    # temp drop prob p; TODO later we'll sweep [0.0, 0.1, 0.3, 0.5]
@@ -29,7 +30,8 @@ for agent in env.agent_iter():
     if termination or truncation:
         action = None
     else:
-        action = random_policy(observation, env.action_space(agent), reward)
+        #action = policies.random_policy(observation, env.action_space(agent), reward)
+        action = policies.q_learning(observation, env.action_space(agent), reward)
         #action = env.action_space(agent).sample() # this is where you would insert your policy
 
     env.step(action)
