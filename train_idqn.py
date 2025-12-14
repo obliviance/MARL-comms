@@ -1,5 +1,5 @@
 from idqn_model import DQN, ReplayBuffer
-from mpe_env import apply_comm_dropout
+from mpe_env import apply_comm_noise, mask_landmarks
 from pettingzoo.mpe import simple_speaker_listener_v4
 import random
 from collections import deque
@@ -13,6 +13,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # communication part: last 3 dims of listener obs: [self_vel, landmark, comm]
 COMM_DIM = 3    # from MPE docs: listener obs shape (11,) last part is communciation
 NOISE_PROB = 0.0    # default training without noise; test with differetn values later
+NOISE_MODE = "dropout" # modes: none, dropout, gaussian, flip
 
 # simple heuristic for speaker:
 # argmax if obs looks like one hot goal od and marches action space size
@@ -73,8 +74,8 @@ def train_idqn(
         done = {agent: False for agent in env.possible_agents}
         
         # initial noisy observation for listener
-        s_l = apply_comm_dropout(listener_id, obs[listener_id], drop_prob=noise_prob)
-        
+        s_raw = apply_comm_noise(listener_id, obs[listener_id], mode=NOISE_MODE, noise_prob=noise_prob)
+        s_l = mask_landmarks(s_raw)
         ep_reward = 0.0
         
         while not all(done.values()):
@@ -114,7 +115,7 @@ def train_idqn(
             ep_reward += r_l
             
             # next noisy obs for listener
-            s_l_next = apply_comm_dropout(listener_id, next_obs[listener_id], drop_prob=noise_prob)
+            s_l_next = apply_comm_noise(listener_id, next_obs[listener_id], mode=NOISE_MODE, noise_prob=noise_prob)
             done_l = done[listener_id]
             
             # store transition
@@ -166,7 +167,7 @@ def train_idqn(
 # Main
 if __name__ == "__main__":
     # train without noise for baseline
-    trained_q, rewards = train_idqn(num_ep=3000, noise_prob=0.0)
+    trained_q, rewards = train_idqn(num_ep=5000, noise_prob=0.0)
     
     # save model weights for later eval
     torch.save(trained_q.state_dict(), "idqn_listener_clean.pth")
