@@ -52,16 +52,17 @@ if __name__ == "__main__":
     noise_probs = [0.0, 0.1, 0.3, 0.5]
     policy_name = "SARSA"
     
-    env = MPEEnv(render_mode="none", max_cycles=100, continuous_actions=False, noise_mode="none", noise_prob=0.0)
+    training_env = MPEEnv(render_mode="human", max_cycles=100, continuous_actions=False, noise_mode="none", noise_prob=0.0)
     
     # Train the SARSA policy
-    trained_q_table = mpe_policies.train_sarsa(env, num_episodes=10, epsilon=0.1, alpha=0.5, gamma=0.9)
+    trained_q_table = mpe_policies.train_sarsa(training_env, num_episodes=10, epsilon=0.1, alpha=0.5, gamma=0.9)
     
     for noise_mode in noise_modes:
         for noise_prob in noise_probs:
             print(f"Evaluating for Noise Mode: {noise_mode}, Noise Probability: {noise_prob}")
             # Evaluate the trained policy
-            rewards = evaluate_policy(env, mpe_policies.run_sarsa, q_table=trained_q_table, noise_mode=noise_mode, noise_prob=noise_prob)
+            eval_env = MPEEnv(render_mode=None, max_cycles=100, continuous_actions=False, noise_mode=noise_mode, noise_prob=noise_prob)
+            rewards = evaluate_policy(eval_env, mpe_policies.run_sarsa, q_table=trained_q_table, noise_mode=noise_mode, noise_prob=noise_prob)
 
             # Writes reward results to file
             with open(policy_name + "_reward_results.txt", "a") as f:

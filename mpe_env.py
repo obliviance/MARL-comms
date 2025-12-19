@@ -1,7 +1,7 @@
 from pettingzoo.mpe import simple_speaker_listener_v4
 import random
 import numpy as np
-from mpe_model import random_policy
+from mpe_policies import random_policy
 import time
 
 # noise config
