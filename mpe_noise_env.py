@@ -76,13 +76,13 @@ class MPEEnv:
         self.episode_lengths = []
         self.episode_length = 0
         self.episode_done = False
-        self._episode_success = None
+        self.episode_success = None
 
     def _finalize_episode(self):
         """Record metrics for the episode that just ended."""
         if self.episode_length == 0:
             return  # nothing to record (first reset before any steps)
-        self.successes.append(int(bool(self._episode_success)))
+        self.successes.append(int(bool(self.episode_success)))
         self.episode_lengths.append(self.episode_length)
         for agent in self.agents:
             ep_rewards = list(self.episode_rewards[agent])
@@ -91,8 +91,8 @@ class MPEEnv:
             self.average_rewards[agent].append(float(np.mean(ep_rewards)) if ep_rewards else 0.0)
             self.episode_rewards[agent].clear()
         self.episode_length = 0
-        self._episode_done = False
-        self._episode_success = None
+        self.episode_done = False
+        self.episode_success = None
     
     def reset(self):
         self._finalize_episode()
@@ -105,7 +105,7 @@ class MPEEnv:
             mode=self.noise_mode,
             noise_prob=self.noise_prob
         )
-        observations[LISTENER_NAME] = mask_listener_landmarks(observations[LISTENER_NAME])
+        observations = mask_listener_landmarks(observations)
 
         print(f"Episode {len(self.episode_lengths)} reset. Metrics updated.")
 
@@ -121,16 +121,16 @@ class MPEEnv:
             mode=self.noise_mode,
             noise_prob=self.noise_prob
         )
-        observations[LISTENER_NAME] = mask_listener_landmarks(observations[LISTENER_NAME])
+        observations = mask_listener_landmarks(observations)
 
         # Update reward and episode length metrics
         for agent in self.agents:
             self.episode_rewards[agent].append(rewards[agent])
         self.episode_length += 1
         # Mark episode done/success when any agent terminates or truncates
-        if not self._episode_done and (any(terminations.values()) or any(truncations.values())):
-            self._episode_done = True
-            self._episode_success = all(terminations.values())
+        if not self.episode_done and (any(terminations.values()) or any(truncations.values())):
+            self.episode_done = True
+            self.episode_success = all(terminations.values())
         
         return observations, rewards, terminations, truncations, infos
     
@@ -159,7 +159,8 @@ class MPEEnv:
             }
         }
 
-        results_filepath = Path(f"{self.policy_name}_{self.run_mode}_results.json")
+        # Write results to a JSON file in the eval_data directory
+        results_filepath = Path(f"eval_data/{self.policy_name}_{self.run_mode}_{self.noise_mode}_{self.noise_prob}_results.json")
         results_filepath.write_text(json.dumps(results, indent=2))
 
         # Closing the original env
