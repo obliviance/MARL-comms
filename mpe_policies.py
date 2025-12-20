@@ -67,6 +67,8 @@ def train_sarsa(env, num_episodes, epsilon=0.1, alpha=0.5, gamma=0.9):
                 break
 
         num_episodes -= 1
+    
+    env.close()
 
     return q_table
 
