@@ -57,6 +57,20 @@ class MPEEnv:
         self.noise_prob = noise_prob
         self.env = simple_speaker_listener_v4.parallel_env(render_mode=render_mode, max_cycles=max_cycles, continuous_actions=continuous_actions)
         self.agents = [SPEAKER_NAME, LISTENER_NAME]
+
+        # Dictionary to hold step rewards for each episode, for each agent
+        self.rewards_dict = {agent: [] for agent in self.agents}
+        # Step rewards for the current episode for each agent
+        self.episode_rewards = {agent: [] for agent in self.agents}
+        # Sum of the rewards in each episode for each agent
+        self.cumulative_rewards = {agent: [] for agent in self.agents}
+        # Average reward over each episode for each agent
+        self.average_rewards = {agent: [] for agent in self.agents}
+        # Record of each episode's success (1 for success, 0 for failure)
+        self.successes = []
+        # Length of each episode 
+        self.episode_lengths = []
+        self.episode_length = 0
     
     def reset(self):
         observations, infos = self.env.reset()
@@ -65,21 +79,58 @@ class MPEEnv:
             mode=self.noise_mode,
             noise_prob=self.noise_prob
         )
+
+        # Update metrics
+        for agent in self.agents:
+            self.rewards_dict[agent].append(self.episode_rewards[agent])
+            self.cumulative_rewards[agent].append(sum(self.episode_rewards[agent]))
+            self.average_rewards[agent].append(
+                np.mean(self.episode_rewards[agent])
+            )
+            self.episode_rewards[agent] = []
+        self.episode_lengths.append(self.episode_length)
+        self.episode_length = 0
+
         return observations, infos
     
     def step(self, action):
+        # Takes a step in the environment with noise applied to observations
         observations, rewards, terminations, truncations, infos = self.env.step(action)
         observations = apply_comm_noise(
             obs=observations,
             mode=self.noise_mode,
             noise_prob=self.noise_prob
         )
+
+        # Update metrics
+        for agent in self.agents:
+            self.episode_rewards[agent].append(rewards[agent])
+        self.episode_length += 1
+        if all(terminations.values()):
+            self.successes.append(1)
+        else:
+            self.successes.append(0)
+        
+        
         return observations, rewards, terminations, truncations, infos
     
     def render(self):
         self.env.render()
     
     def close(self):
+        policy_name = "SARSA"
+        with open(policy_name + "_results.txt", "a") as f:
+            f.write(f"Results for Policy: {policy_name}, Noise Mode: {self.noise_mode}, Noise Probability: {self.noise_prob}\n\n")
+            f.write("Successes over Episodes:\n")
+            f.write(f"{self.successes}\n\n")
+            f.write("Episode Lengths:\n")
+            f.write(f"{self.episode_lengths}\n\n")
+            for agent in self.agents:
+                f.write(f"Agent: {agent}\n")
+                for episode in range(len(self.rewards_dict[agent])):
+                    f.write(f"Episode {episode + 1} Values:\n")
+                    f.write(f"Cumulative Reward: {self.cumulative_rewards[agent][episode]}\n")
+                    f.write(f"Average Reward: {self.average_rewards[agent][episode]}\n")
         self.env.close()
 
     def action_space(self, agent):
