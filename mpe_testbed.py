@@ -10,7 +10,7 @@ def evaluate_policy(
     env,
     policy_fn,
     q_table,
-    num_episodes: int = 100,
+    num_episodes,
 ):
     
     for episode in range(num_episodes):
@@ -36,18 +36,20 @@ def evaluate_policy(
 
 if __name__ == "__main__":
     noise_modes = ["dropout", "gaussian", "flip"]
-    noise_probs = [0.0, 0.1, 0.3, 0.5]
+    noise_probs = [0.0, 0.1, 0.3, 0.5, 1.0]
     policy_name = "SARSA"
 
-    # Training environment 
-    training_env = MPEEnv(render_mode="human", max_cycles=100, continuous_actions=False, noise_mode="none", noise_prob=0.0)
-    
-    # Train the SARSA policy
-    trained_q_table = mpe_policies.train_sarsa(training_env, num_episodes=10, epsilon=0.1, alpha=0.5, gamma=0.9)
-    
+    # Training SARSA policy with different noise settings
+    trained_q_table = None
+    for noise_mode in noise_modes:
+        for noise_prob in noise_probs:
+            print(f"Training SARSA with Noise Mode: {noise_mode}, Noise Probability: {noise_prob}")
+            training_env = MPEEnv(render_mode=None, max_cycles=50, continuous_actions=False, noise_mode=noise_mode, noise_prob=noise_prob, policy_name=policy_name, run_mode="training")
+            trained_q_table = mpe_policies.train_sarsa(training_env, num_episodes=1000, epsilon=0.1, alpha=0.5, gamma=0.9)
+
+    # Evaluating the trained SARSA policy with different noise settings    
     for noise_mode in noise_modes:
         for noise_prob in noise_probs:
             print(f"Evaluating for Noise Mode: {noise_mode}, Noise Probability: {noise_prob}")
-            # Evaluate the trained policy
-            eval_env = MPEEnv(render_mode=None, max_cycles=100, continuous_actions=False, noise_mode=noise_mode, noise_prob=noise_prob)
-            evaluate_policy(eval_env, mpe_policies.run_sarsa, q_table=trained_q_table, num_episodes=100)
+            eval_env = MPEEnv(render_mode=None, max_cycles=50, continuous_actions=False, noise_mode=noise_mode, noise_prob=noise_prob, policy_name=policy_name, run_mode="evaluation")
+            evaluate_policy(eval_env, mpe_policies.run_sarsa, q_table=trained_q_table, num_episodes=500)
