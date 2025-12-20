@@ -7,7 +7,6 @@ def run_random(observation, action_space, reward):
 # Simple SARSA policy
 def train_sarsa(env, num_episodes, epsilon=0.1, alpha=0.5, gamma=0.9):
     # Initialize a Q-table for each agent in the env
-    env.reset()
     q_table = {agent: {} for agent in env.agents}
 
     # Helper function to get state-action pairs
