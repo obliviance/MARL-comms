@@ -1,6 +1,8 @@
 from pettingzoo.mpe import simple_speaker_listener_v4
 import random
 import numpy as np
+from pathlib import Path
+import json
 
 SPEAKER_NAME = "speaker_0"
 LISTENER_NAME = "listener_0"
@@ -38,7 +40,7 @@ def apply_comm_noise(
             new_idx = random.choice(candidates)
         else:
             new_idx = current_idx
-        new_vec = np.zeros(COMM_DIM, dtype=obs.dtype)
+        new_vec = np.zeros(COMM_DIM, dtype=obs[LISTENER_NAME].dtype)
         new_vec[new_idx] = 1.0
         obs[LISTENER_NAME][comm_slice] = new_vec
     
@@ -52,11 +54,13 @@ def mask_listener_landmarks(obs: np.ndarray):
     return masked
 
 class MPEEnv:
-    def __init__(self, render_mode, max_cycles, continuous_actions, noise_mode, noise_prob):
+    def __init__(self, render_mode, max_cycles, continuous_actions, noise_mode, noise_prob, policy_name, run_mode):
         self.noise_mode = noise_mode
         self.noise_prob = noise_prob
         self.env = simple_speaker_listener_v4.parallel_env(render_mode=render_mode, max_cycles=max_cycles, continuous_actions=continuous_actions)
         self.agents = [SPEAKER_NAME, LISTENER_NAME]
+        self.policy_name = policy_name
+        self.run_mode = run_mode
 
         # Dictionary to hold step rewards for each episode, for each agent
         self.rewards_dict = {agent: [] for agent in self.agents}
@@ -71,46 +75,62 @@ class MPEEnv:
         # Length of each episode 
         self.episode_lengths = []
         self.episode_length = 0
+        self.episode_done = False
+        self._episode_success = None
+
+    def _finalize_episode(self):
+        """Record metrics for the episode that just ended."""
+        if self.episode_length == 0:
+            return  # nothing to record (first reset before any steps)
+        self.successes.append(int(bool(self._episode_success)))
+        self.episode_lengths.append(self.episode_length)
+        for agent in self.agents:
+            ep_rewards = list(self.episode_rewards[agent])
+            self.rewards_dict[agent].append(ep_rewards)
+            self.cumulative_rewards[agent].append(float(sum(ep_rewards)))
+            self.average_rewards[agent].append(float(np.mean(ep_rewards)) if ep_rewards else 0.0)
+            self.episode_rewards[agent].clear()
+        self.episode_length = 0
+        self._episode_done = False
+        self._episode_success = None
     
     def reset(self):
+        self._finalize_episode()
+        # Calling the original env reset
         observations, infos = self.env.reset()
+
+        # Applying communication noise and masking landmarks for listener
         observations = apply_comm_noise(
             obs=observations,
             mode=self.noise_mode,
             noise_prob=self.noise_prob
         )
+        observations[LISTENER_NAME] = mask_listener_landmarks(observations[LISTENER_NAME])
 
-        # Update metrics
-        for agent in self.agents:
-            self.rewards_dict[agent].append(self.episode_rewards[agent])
-            self.cumulative_rewards[agent].append(sum(self.episode_rewards[agent]))
-            self.average_rewards[agent].append(
-                np.mean(self.episode_rewards[agent])
-            )
-            self.episode_rewards[agent] = []
-        self.episode_lengths.append(self.episode_length)
-        self.episode_length = 0
+        print(f"Episode {len(self.episode_lengths)} reset. Metrics updated.")
 
         return observations, infos
     
     def step(self, action):
-        # Takes a step in the environment with noise applied to observations
+        # Calling the original env step
         observations, rewards, terminations, truncations, infos = self.env.step(action)
+        
+        # Apply communication noise and mask landmarks for listener
         observations = apply_comm_noise(
             obs=observations,
             mode=self.noise_mode,
             noise_prob=self.noise_prob
         )
+        observations[LISTENER_NAME] = mask_listener_landmarks(observations[LISTENER_NAME])
 
-        # Update metrics
+        # Update reward and episode length metrics
         for agent in self.agents:
             self.episode_rewards[agent].append(rewards[agent])
         self.episode_length += 1
-        if all(terminations.values()):
-            self.successes.append(1)
-        else:
-            self.successes.append(0)
-        
+        # Mark episode done/success when any agent terminates or truncates
+        if not self._episode_done and (any(terminations.values()) or any(truncations.values())):
+            self._episode_done = True
+            self._episode_success = all(terminations.values())
         
         return observations, rewards, terminations, truncations, infos
     
@@ -118,19 +138,31 @@ class MPEEnv:
         self.env.render()
     
     def close(self):
-        policy_name = "SARSA"
-        with open(policy_name + "_results.txt", "a") as f:
-            f.write(f"Results for Policy: {policy_name}, Noise Mode: {self.noise_mode}, Noise Probability: {self.noise_prob}\n\n")
-            f.write("Successes over Episodes:\n")
-            f.write(f"{self.successes}\n\n")
-            f.write("Episode Lengths:\n")
-            f.write(f"{self.episode_lengths}\n\n")
-            for agent in self.agents:
-                f.write(f"Agent: {agent}\n")
-                for episode in range(len(self.rewards_dict[agent])):
-                    f.write(f"Episode {episode + 1} Values:\n")
-                    f.write(f"Cumulative Reward: {self.cumulative_rewards[agent][episode]}\n")
-                    f.write(f"Average Reward: {self.average_rewards[agent][episode]}\n")
+        self._finalize_episode()
+
+        # Save results to a JSON file
+        results = {
+            "policy": self.policy_name,
+            "run_mode": self.run_mode,
+            "noise": {
+                "mode": self.noise_mode,
+                "prob": self.noise_prob
+            },
+            "successes": self.successes,
+            "episode_lengths": self.episode_lengths,
+            "agents": {
+                agent: {
+                    "episode_rewards": self.rewards_dict[agent],
+                    "cumulative_rewards": self.cumulative_rewards[agent],
+                    "average_rewards": self.average_rewards[agent]
+                } for agent in self.agents
+            }
+        }
+
+        results_filepath = Path(f"{self.policy_name}_{self.run_mode}_results.json")
+        results_filepath.write_text(json.dumps(results, indent=2))
+
+        # Closing the original env
         self.env.close()
 
     def action_space(self, agent):
