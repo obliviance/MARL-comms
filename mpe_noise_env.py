@@ -54,22 +54,24 @@ def mask_listener_landmarks(obs: np.ndarray):
     return masked
 
 class MPEEnv:
-    def __init__(self, render_mode, max_cycles, continuous_actions, noise_mode, noise_prob, policy_name, run_mode):
+    def __init__(self, render_mode, max_cycles, continuous_actions, noise_mode, noise_prob, policy_name, run_mode, success_threshold):
         self.noise_mode = noise_mode
         self.noise_prob = noise_prob
         self.env = simple_speaker_listener_v4.parallel_env(render_mode=render_mode, max_cycles=max_cycles, continuous_actions=continuous_actions)
         self.agents = [SPEAKER_NAME, LISTENER_NAME]
+        self.possible_agents = self.env.possible_agents
         self.policy_name = policy_name
         self.run_mode = run_mode
+        self.success_threshold = success_threshold
 
-        # Dictionary to hold step rewards for each episode, for each agent
-        self.rewards_dict = {agent: [] for agent in self.agents}
+        # Dictionary to hold step rewards for each episode, for the listener agent
+        self.rewards_dict = {LISTENER_NAME: []}
         # Step rewards for the current episode for each agent
-        self.episode_rewards = {agent: [] for agent in self.agents}
-        # Sum of the rewards in each episode for each agent
-        self.cumulative_rewards = {agent: [] for agent in self.agents}
-        # Average reward over each episode for each agent
-        self.average_rewards = {agent: [] for agent in self.agents}
+        self.episode_rewards = []
+        # Sum of the rewards in each episode for the listener agent
+        self.cumulative_rewards = {LISTENER_NAME: []}
+        # Average reward over each episode for the listener agent
+        self.average_rewards = {LISTENER_NAME: []}
         # Record of each episode's success (1 for success, 0 for failure)
         self.successes = []
         # Length of each episode 
@@ -84,12 +86,14 @@ class MPEEnv:
             return  # nothing to record (first reset before any steps)
         self.successes.append(int(bool(self.episode_success)))
         self.episode_lengths.append(self.episode_length)
-        for agent in self.agents:
-            ep_rewards = list(self.episode_rewards[agent])
-            self.rewards_dict[agent].append(ep_rewards)
-            self.cumulative_rewards[agent].append(float(sum(ep_rewards)))
-            self.average_rewards[agent].append(float(np.mean(ep_rewards)) if ep_rewards else 0.0)
-            self.episode_rewards[agent].clear()
+        
+        # Only track metrics for the listener agent
+        agent_rewards = [step_rewards[LISTENER_NAME] for step_rewards in self.episode_rewards]
+        self.rewards_dict[LISTENER_NAME].append(agent_rewards)
+        self.cumulative_rewards[LISTENER_NAME].append(float(sum(agent_rewards)))
+        self.average_rewards[LISTENER_NAME].append(float(np.mean(agent_rewards)) if agent_rewards else 0.0)
+            
+        self.episode_rewards.clear()
         self.episode_length = 0
         self.episode_done = False
         self.episode_success = None
@@ -124,18 +128,17 @@ class MPEEnv:
         observations = mask_listener_landmarks(observations)
 
         # Update reward and episode length metrics
-        for agent in self.agents:
-            self.episode_rewards[agent].append(rewards[agent])
+        self.episode_rewards.append(rewards)
         self.episode_length += 1
         # Mark episode done/success when any agent terminates or truncates
         if not self.episode_done and (any(terminations.values()) or any(truncations.values())):
             self.episode_done = True
-            self.episode_success = all(terminations.values())
+            self.episode_success = self.episode_rewards[-1][LISTENER_NAME] > self.success_threshold
         
         return observations, rewards, terminations, truncations, infos
     
     def render(self):
-        self.env.render()
+        return self.env.render()
     
     def close(self):
         self._finalize_episode()
@@ -151,11 +154,11 @@ class MPEEnv:
             "successes": self.successes,
             "episode_lengths": self.episode_lengths,
             "agents": {
-                agent: {
-                    "episode_rewards": self.rewards_dict[agent],
-                    "cumulative_rewards": self.cumulative_rewards[agent],
-                    "average_rewards": self.average_rewards[agent]
-                } for agent in self.agents
+                LISTENER_NAME: {
+                    "episode_rewards": self.rewards_dict[LISTENER_NAME],
+                    "cumulative_rewards": self.cumulative_rewards[LISTENER_NAME],
+                    "average_rewards": self.average_rewards[LISTENER_NAME]
+                }
             }
         }
 
